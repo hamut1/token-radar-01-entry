@@ -19,6 +19,9 @@ export interface Snapshot {
   watchlist: string[];
 }
 
+// Category rules establish the starting share of TVL used in the dollar estimate.
+// Order matters because a label can match several patterns and the first tier wins.
+// The same classification supplies the entry and weekly instructions in the farm plan.
 const categories = [
   {
     key: 'lending', match: /lend|cdp|collateral/i, multiple: 0.34,
@@ -67,6 +70,7 @@ const categories = [
   },
 ];
 
+// Missing and unfamiliar labels share a tier, which keeps their rows comparable.
 const fallback = {
   key: 'other',
   multiple: 0.19,
@@ -74,6 +78,7 @@ const fallback = {
   weekly: 'Verify the receipt and repeat the smallest documented eligible action only if it serves the position.',
 };
 
+// Publish the same category weights and curve parameters used in scoring for inspection.
 export const MODEL = {
   category_multiples: Object.fromEntries([...categories, fallback].map(tier => [tier.key, tier.multiple])),
   growth_floor: -45,
@@ -99,6 +104,7 @@ const VALUE_CAP = 100_000_000_000_000;
 const VERSION_SUFFIX = /\s(?:v\d+(?:\.\d+)*|\d+(?:\.\d+)+)$/i;
 const CAUTIOUS_CATEGORIES = new Set(['derivatives', 'prediction', 'launchpad', 'other']);
 
+// Use code-unit order to resolve exact ties consistently across host locales.
 function compareSlug(left: { slug: string }, right: { slug: string }): number {
   return Number(left.slug > right.slug) - Number(left.slug < right.slug);
 }
@@ -131,18 +137,29 @@ export function isRankable(protocol: SnapshotProtocol): boolean {
 
 export function impliedValue(protocol: SnapshotProtocol, asOf: string, model: ModelConstants = MODEL) {
   const age = ageDays(asOf, protocol.listed_at);
+  // Keep unknown recorded ages visible while using a fixed substitute for scoring.
   const days = age ?? model.unknown_age_days;
   const baseMultiple = model.category_multiples[categoryFor(protocol).key];
+  // Clamp percentage points before converting the magnitude to a fraction.
+  // The square root compresses larger moves and the loss weight makes declines count more.
   const growthPct = Math.max(model.growth_floor, Math.min(model.growth_cap, protocol.change_7d ?? 0));
   const weight = growthPct < 0 ? model.loss_weight : model.gain_weight;
   const growthMult = 1 + Math.sign(growthPct) * Math.sqrt(Math.abs(growthPct) / 100) * weight;
+  // Normalize the log against the capped age so the curve spans zero to one.
+  // Adding one before taking the log makes the curve defined even at day zero.
+  // An extra day counts most early on, and age stops lifting the score at the cap.
   const maturityFraction = Math.log1p(Math.min(days, model.maturity_days)) / Math.log1p(model.maturity_days);
   const maturityMult = model.maturity_floor + model.maturity_range * maturityFraction;
+  // The first distinct chain establishes the baseline. Only additional chains earn a bonus.
   const extraChains = Math.max(0, new Set(protocol.chains).size - 1);
   const chainBonus = Math.min(extraChains, model.extra_chain_cap) * model.extra_chain_bonus;
 
   // A quadratic taper retains more of the uncertainty discount during the first weeks.
+  // At half the window, three quarters of the original discount still applies.
+  // The zero floor keeps the adjustment neutral after the window closes.
   const youngDiscount = model.young_discount * Math.max(0, 1 - (days / model.young_days) ** 2);
+  // Apply the chain and youth terms additively after combining maturity and growth.
+  // Round the dollar score once, after applying every factor to the TVL baseline.
   const adjustedMultiple = maturityMult * growthMult + chainBonus - youngDiscount;
   const value = Math.round(protocol.tvl_usd * baseMultiple * adjustedMultiple);
   const implied = Math.max(1, Math.min(VALUE_CAP, value));
@@ -189,6 +206,8 @@ export interface BoardRow extends SnapshotProtocol {
   farm_steps: string[];
 }
 
+// Fill the extra slots by TVL before any valuation factors enter the calculation.
+// The strict floor excludes protocols whose TVL equals the threshold.
 function earlyProtocols(snapshot: Snapshot, watchlist: Set<string>): SnapshotProtocol[] {
   return snapshot.protocols
     .filter(protocol => protocol.tvl_usd < snapshot.floor_usd && !watchlist.has(protocol.slug) && isRankable(protocol))
@@ -197,12 +216,15 @@ function earlyProtocols(snapshot: Snapshot, watchlist: Set<string>): SnapshotPro
 }
 
 export function buildBoard(snapshot: Snapshot, model: ModelConstants = MODEL): BoardRow[] {
+  // Explicit watchlist membership applies after the pre-token test, at any TVL.
   const watchlist = new Set(snapshot.watchlist);
   const watched = snapshot.protocols.filter(protocol => watchlist.has(protocol.slug) && isPreToken(protocol));
   const scored = [...watched, ...earlyProtocols(snapshot, watchlist)].map(protocol => ({
     protocol,
     score: impliedValue(protocol, snapshot.as_of, model),
   }));
+  // Rank the combined set on rounded implied dollars, with slugs breaking equal scores.
+  // Assign consecutive ranks only after establishing that final order.
   scored.sort((left, right) => right.score.implied - left.score.implied || compareSlug(left.protocol, right.protocol));
   return scored.map(({ protocol, score }, index) => ({
     ...protocol,
@@ -223,6 +245,7 @@ export function buildBoard(snapshot: Snapshot, model: ModelConstants = MODEL): B
   }));
 }
 
+// Reported market caps order the separate live sample for dashboard comparison.
 export function liveRows(snapshot: Snapshot) {
   const listed = snapshot.protocols.filter(protocol => !isPreToken(protocol));
   listed.sort((left, right) => (right.mcap_usd ?? -1) - (left.mcap_usd ?? -1) || compareSlug(left, right));
@@ -334,6 +357,7 @@ export function boardIssue(board: BoardRow[], snapshot: Snapshot): string | null
   for (const protocol of earlyProtocols(snapshot, eligible)) eligible.add(protocol.slug);
   const preToken = new Set(snapshot.protocols.filter(isPreToken).map(protocol => protocol.slug));
   const ranked = [...board].sort((left, right) => left.rank - right.rank);
+  // Dollar rounding can produce ties in other snapshots, so only increases fail this check.
   let previous = Infinity;
   for (const [index, row] of ranked.entries()) {
     const { slug, rank, implied_value_usd: value, farm_steps: steps } = row;
