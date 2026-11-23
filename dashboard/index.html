@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0a101d">
+  <title>Token Radar — Protocol valuation board</title>
+  <link rel="stylesheet" href="app.css">
+  <script defer src="../data.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <a class="skip" href="#board">Skip to valuation board</a>
+  <header class="top">
+    <div class="shell masthead">
+      <div class="brand"><span class="signal" aria-hidden="true"></span>Token Radar</div>
+      <div class="edition">
+        <span>Snapshot <time id="date"></time></span>
+        <a href="#model">Model <span id="version"></span></a>
+      </div>
+    </div>
+  </header>
+  <main class="shell">
+    <p id="missing" hidden>Snapshot unavailable. Open the dashboard alongside the generated data.js file.</p>
+    <section id="dashboard" hidden>
+      <div class="hero">
+        <div>
+          <p class="eyebrow">Pre-token intelligence</p>
+          <h1>What could these<br> protocols be worth?</h1>
+          <p class="intro">A snapshot of DeFi protocols that record no token, ranked by implied value.</p>
+        </div>
+        <div class="radar" aria-hidden="true"><span></span><i></i><b></b></div>
+        <dl id="stats" class="stats"></dl>
+      </div>
+      <section id="board" class="board" tabindex="-1" aria-labelledby="board-title">
+        <div class="board-heading">
+          <div>
+            <p class="eyebrow">Snapshot rankings</p>
+            <h2 id="board-title">Valuation board</h2>
+          </div>
+          <div class="views" role="group" aria-label="Token status">
+            <button type="button" id="pre" aria-pressed="true">Pre-token</button>
+            <button type="button" id="live" aria-pressed="false">Live-token</button>
+          </div>
+        </div>
+        <div class="filters" role="search" aria-label="Board filters">
+          <label class="search"><span>Search</span><input id="query" type="search" placeholder="Name, slug, category or chain" autocomplete="off"></label>
+          <label><span>Category</span><select id="category"><option value="">All categories</option></select></label>
+          <button type="button" id="clear">Clear filters</button>
+        </div>
+        <div class="results">
+          <p id="count" role="status"></p>
+          <p id="view-note"></p>
+        </div>
+        <div class="table-wrap" role="region" aria-label="Protocol rankings" tabindex="0">
+          <table aria-labelledby="board-title">
+            <thead><tr id="columns"></tr></thead>
+            <tbody id="rows"></tbody>
+          </table>
+          <p id="empty" hidden>No protocols match these filters.</p>
+        </div>
+      </section>
+      <section class="method" id="model" aria-labelledby="model-title">
+        <div>
+          <p class="eyebrow">Methodology</p>
+          <h2 id="model-title">How value is modeled</h2>
+          <p>Implied value uses only total value locked (TVL), seven-day growth, age with no token, category tier and chain diversity. The same rules apply to every protocol, regardless of name.</p>
+          <p>Start with TVL times its category multiple. Scale that base by maturity times the growth factor, plus the bonus for extra chains, less the discount for newer protocols. Round and bound the result.</p>
+          <p>The pre-token board lists protocols with the status “records no token” in the snapshot. Protocols whose token already trades appear in the separate live-token view, ordered by recorded market cap.</p>
+        </div>
+        <div>
+          <p class="formula" id="formula"></p>
+          <dl class="rules" id="rules"></dl>
+          <h3>Category multiples</h3>
+          <dl class="tiers" id="tiers"></dl>
+        </div>
+      </section>
+    </section>
+    <footer><span id="source"></span><span>Snapshot estimates are illustrative. Farm steps are recorded as of the snapshot date.</span></footer>
+  </main>
+  <dialog id="detail" aria-labelledby="detail-title">
+    <div class="detail-top">
+      <span id="detail-rank" class="eyebrow"></span>
+      <button type="button" id="close" aria-label="Close protocol detail" autofocus>Close <span aria-hidden="true">×</span></button>
+    </div>
+    <div id="detail-content"></div>
+  </dialog>
+</body>
+</html>
